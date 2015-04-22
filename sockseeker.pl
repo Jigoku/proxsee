@@ -21,7 +21,6 @@ use IO::Socket;
 use IO::Socket::Socks;
 use threads;
 use Thread::Semaphore;
-use LWP::UserAgent;
 use Net::IP;
 use Geo::IP;
 use POSIX;
