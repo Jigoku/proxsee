@@ -33,12 +33,12 @@ my ($port, $maxthreads, $timeout, $range, $scantype);
 my ($debug, $seektype) = (0, 0);
 
 for (@ARGV) {
-	if ($_ =~ m/-(-help|h)/) 			{ help_msg(); exit(0); } 
+	if ($_ =~ m/-(-help|h)/) 		{ help_msg(); exit(0); } 
 	if ($_ =~ m/-(-range|r)=(.+)/)  	{ $range      = $2; $seektype = 1; } 
 	if ($_ =~ m/-(-port|p)=(\d{1,5})/) 	{ $port       = $2; } 
-	if ($_ =~ m/-(-timeout|t)=(\d+)/)   { $timeout    = $2; } 
-	if ($_ =~ m/-(-threads|thr)=(\d+)/) { $maxthreads = $2; } 
-	if ($_ =~ m/--debug/) { $debug = 1; } 
+	if ($_ =~ m/-(-timeout|t)=(\d+)/	{ $timeout    = $2; } 
+	if ($_ =~ m/-(-threads|thr)=(\d+)/) 	{ $maxthreads = $2; } 
+	if ($_ =~ m/--debug/) 			{ $debug = 1; } 
 }
 
 if (!($port =~ m/(\d{1,5})/))   { print "[ -] Invalid port supplied\n"; exit(2); }
@@ -137,7 +137,7 @@ sub geoip_code($) {
 }
 
 sub debug($) {
-		if ($debug == 1) { print shift };
+	if ($debug == 1) { print shift };
 }
 
 sub gen_ip {	
