@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# sockseeker - threaded socks4/socks5 proxy finder
+# sockseeker - threaded socks4/socks5/http proxy finder
 #
 # Usage: ./$0 --help
 #
@@ -15,10 +15,15 @@
 # GNU General Public License for more details.
 # u should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
+use Config;
+$Config{useithreads}
+	or die('Recompile Perl with threads to run this program.');
+	
 use strict;
 use warnings;
 use IO::Socket;
 use IO::Socket::Socks;
+use LWP::UserAgent;
 use threads;
 use Thread::Semaphore;
 use Net::IP;
@@ -45,34 +50,34 @@ if (!($port =~ m/(\d{1,5})/))   { print "[ -] Invalid port supplied\n"; exit(2);
 if (!($timeout =~ m/(\d+)/))    { print "[ -] Invalid timeout supplied\n"; exit(2); }
 if (!($maxthreads =~ m/(\d+)/)) { print "[ -] Invalid thread count\n"; exit(2); }
 
-my @threads;
+
 my $semaphore = Thread::Semaphore->new($maxthreads);
 
-# the main loop
-while (1) {
-	if ($seektype == 1) {
-		start_range($range);
-	} else {
-		start_random();		
-	}
-}
+$SIG{'INT'} = sub { 
+	print "captured SIGINT! Exiting...\n"; 
+	$_->detach for threads->list;
+	exit(2); 
+};
 
-
-sub start_random {
-	$semaphore->down;
-	threads->create(\&seek_socks, gen_ip())->detach;
-}
-
-sub start_range {
-	my $range = new Net::IP (shift) 
+if ($seektype == 1) {
+	my $range = new Net::IP ($range) 
 		or die (Net::IP::Error());
 		
 	do {		
 		$semaphore->down;
 		threads->create(\&seek_socks, $range->ip())->detach;
 	} while (++$range);
-	exit(0);
+	
+} else {
+	while (1) {
+		$semaphore->down;
+		threads->create(\&seek_socks, gen_ip())->detach;	
+	}
 }
+
+
+
+
 
 sub seek_socks {
 	my $target = shift; 
@@ -86,19 +91,13 @@ sub seek_socks {
 	);
 
 	if ($sock) {
+		my $end = ceil(tv_interval($start)*1000);	
+		debug("ALIVE  [". geoip_code($target) . "]\t$target:$port\n");	
 		$sock->close();
-		my $end = ceil(tv_interval($start)*1000);
-		
-		if (is_socks(4, $target)) {
-			print "SOCKS4 [". geoip_code($target) . "] (${end}ms)\t$target:$port\n";
-		}
 			
-		if (is_socks(5, $target)) {
-			print "SOCKS5 [". geoip_code($target) . "] (${end}ms)\t$target:$port\n";
-		}
-		
-		
-		debug("ALIVE  [". geoip_code($target) . "] (${end}ms)\t$target:$port\n");	
+		is_http($target);	 # checks for http anonymous / transparent
+		is_socks(4, $target);# checks for open socks4
+		is_socks(5, $target);# checks for open socks5
 		
 	} else {
 		debug("DEAD   [". geoip_code($target) . "] \t$target:$port\n");
@@ -108,6 +107,7 @@ sub seek_socks {
 
 sub is_socks($$) {
 	my ($socks_version, $ip) = @_;
+	my $start=[gettimeofday()];
 	my $sock = new IO::Socket::Socks(
         	        ProxyAddr	=> $ip,
 	                ProxyPort	=> $port,
@@ -119,6 +119,8 @@ sub is_socks($$) {
 	);
 	
 	if ($sock) {
+		my $end = ceil(tv_interval($start)*1000);	
+		print "SOCKS".$socks_version." [". geoip_code($ip) . "] (${end}ms)\t$ip:$port\n";
 		$sock->close();
 		return 1;
 	} else {
@@ -127,6 +129,31 @@ sub is_socks($$) {
 	}
 
 }
+
+sub is_http($) {
+	my $ip = shift;
+	my $start=[gettimeofday()];
+	my $ua = LWP::UserAgent->new;
+	$ua->timeout($timeout);
+    $ua->agent("Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 ");
+    
+	$ua->proxy([ 'http', 'https' ], "http://".$ip.":".$port);
+
+	my $result = $ua->get("http://checkip.dyndns.org")->decoded_content;
+
+	if ($result =~ m/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/) {
+		my $end = ceil(tv_interval($start)*1000);	
+		if ($1 eq $ip) {
+			print "Anonymous HTTP [". geoip_code($ip) . "] (${end}ms)\t$ip:$port\n";
+			return 1;
+		} else {
+			print "Transparent HTTP [". geoip_code($ip) . "] (${end}ms)\t$ip:$port\n";
+			return 1;
+		}
+	}
+	return 0;
+}
+
 
 sub geoip_code($) {
 	# returns country code for address
