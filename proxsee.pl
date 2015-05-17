@@ -34,16 +34,16 @@ $|++;
 
 Geo::IP->open("/usr/share/GeoIP/GeoIP.dat", GEOIP_STANDARD);
 
-my ($port, $maxthreads, $timeout, $range, $scantype);
+my ($port, $maxthreads, $timeout, $range);
 my ($debug, $seektype) = (0, 0);
 
 for (@ARGV) {
-	if ($_ =~ m/-(-help|h)/) 		{ help_msg(); exit(0); } 
-	if ($_ =~ m/-(-range|r)=(.+)/)  	{ $range      = $2; $seektype = 1; } 
-	if ($_ =~ m/-(-port|p)=(\d{1,5})/) 	{ $port       = $2; } 
-	if ($_ =~ m/-(-timeout|t)=(\d+)/	{ $timeout    = $2; } 
-	if ($_ =~ m/-(-threads|thr)=(\d+)/) 	{ $maxthreads = $2; } 
-	if ($_ =~ m/--debug/) 			{ $debug = 1; } 
+	if ($_ =~ m/-(-help|h)/) 			{ help_msg(); exit(0); } 
+	if ($_ =~ m/-(-range|r)=(.+)/)		{ $range      = $2; $seektype = 1; } 
+	if ($_ =~ m/-(-port|p)=(\d{1,5})/)	{ $port       = $2; } 
+	if ($_ =~ m/-(-timeout|t)=(\d+)/)	{ $timeout    = $2; } 
+	if ($_ =~ m/-(-threads|thr)=(\d+)/)	{ $maxthreads = $2; } 
+	if ($_ =~ m/--debug/)				{ $debug = 1; } 
 }
 
 if (!($port =~ m/(\d{1,5})/))   { print "[ -] Invalid port supplied\n"; exit(2); }
@@ -55,7 +55,7 @@ my $semaphore = Thread::Semaphore->new($maxthreads);
 
 $SIG{'INT'} = sub { 
 	print "captured SIGINT! Exiting...\n"; 
-	$_->detach for threads->list;
+	#$_->join for threads->list;
 	exit(2); 
 };
 
@@ -65,21 +65,18 @@ if ($seektype == 1) {
 		
 	do {		
 		$semaphore->down;
-		threads->create(\&seek_socks, $range->ip())->detach;
+		threads->create(\&seek_proxy, $range->ip())->detach;
 	} while (++$range);
 	
 } else {
 	while (1) {
 		$semaphore->down;
-		threads->create(\&seek_socks, gen_ip())->detach;	
+		threads->create(\&seek_proxy, gen_ip())->detach;	
 	}
 }
 
 
-
-
-
-sub seek_socks {
+sub seek_proxy {
 	my $target = shift; 
 	my $start=[gettimeofday()];
 
@@ -135,7 +132,7 @@ sub is_http($) {
 	my $start=[gettimeofday()];
 	my $ua = LWP::UserAgent->new;
 	$ua->timeout($timeout);
-    $ua->agent("Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 ");
+	$ua->agent("Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 ");
     
 	$ua->proxy([ 'http', 'https' ], "http://".$ip.":".$port);
 
