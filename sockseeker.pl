@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# sockseeker - threaded socks4/socks5/http proxy finder
+# proxsee - threaded socks4/socks5/http proxy finder with GeoIP location
 #
 # Usage: ./$0 --help
 #
